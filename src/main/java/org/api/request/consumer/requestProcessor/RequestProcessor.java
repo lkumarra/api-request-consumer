@@ -5,35 +5,50 @@ import io.restassured.response.Response;
 import io.restassured.specification.RequestSpecification;
 import org.api.request.consumer.requestModal.APIRequest;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.Map;
 
 public class RequestProcessor {
-    public String executeRequest(APIRequest request) throws Exception {
+    private RequestSpecification setupRequest(APIRequest request) {
         RestAssured.baseURI = request.getUrl();
-        RequestSpecification httpRequest = RestAssured.given()
-                .log().all();  // Log all request details
+        RequestSpecification httpRequest = RestAssured.given().log().all();
         for (Map.Entry<String, String> entry : request.getHeaders().entrySet()) {
             httpRequest.header(entry.getKey(), entry.getValue());
         }
-        Response response;
-        if ("POST".equalsIgnoreCase(request.getMethod())) {
-            response = httpRequest.body(request.getBody()).post();
-        } else if ("PUT".equalsIgnoreCase(request.getMethod())) {
-            response = httpRequest.body(request.getBody()).put();
-        } else if ("GET".equalsIgnoreCase(request.getMethod())) {
-            response = httpRequest.get();
-        } else if ("DELETE".equalsIgnoreCase(request.getMethod())) {
-            response = httpRequest.delete();
-        } else {
-            throw new UnsupportedOperationException("Unsupported HTTP method: " + request.getMethod());
-        }
-        response.then().log().all();
-        return response.getBody().asString();
+        return httpRequest;
     }
+
+    private Response executeHttpMethod(RequestSpecification httpRequest, APIRequest request) {
+        Response response;
+
+        switch (request.getMethod().toUpperCase()) {
+            case "POST":
+                response = httpRequest.body(request.getBody()).post();
+                break;
+            case "PUT":
+                response = httpRequest.body(request.getBody()).put();
+                break;
+            case "GET":
+                response = httpRequest.get();
+                break;
+            case "DELETE":
+                response = httpRequest.delete();
+                break;
+            default:
+                throw new UnsupportedOperationException("Unsupported HTTP method: " + request.getMethod());
+        }
+        return response;
+    }
+
+    private void logResponse(Response response) {
+        response.then().log().all();
+    }
+
+    public Response executeRequest(APIRequest request) {
+        RequestSpecification httpRequest = setupRequest(request);
+        Response response = executeHttpMethod(httpRequest, request);
+        logResponse(response);
+        return response;
+    }
+
 
 }

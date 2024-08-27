@@ -1,14 +1,21 @@
 package org.api.request.consumer.requestConsumer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.restassured.response.Response;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.TopicPartition;
 import org.api.request.consumer.helpers.PropertyReaderHelper;
+import org.api.request.consumer.models.ExpectedResponseWrapper;
 import org.api.request.consumer.requestModal.APIRequest;
 import org.api.request.consumer.requestProcessor.RequestProcessor;
+import org.api.request.consumer.responseModal.ResponseModel;
+import org.api.request.consumer.responseValidor.IResponseValidator;
+import org.api.request.consumer.responseValidor.ResponseValidator;
+import org.api.request.consumer.responseValidor.ResponseValidatorProcessor;
+import org.api.request.consumer.responseWrapper.ResponseWrapper;
 
 import java.time.Duration;
 import java.util.*;
@@ -35,7 +42,8 @@ public class RequestConsumer {
                     log.info("Received message: {}", message);
                     ObjectMapper objectMapper = new ObjectMapper();
                     APIRequest apiRequest = objectMapper.readValue(message, APIRequest.class);
-                    processor.executeRequest(apiRequest);
+                    Response response = processor.executeRequest(apiRequest);
+                    responseProcessor(response);
                 }
             }
         } finally {
@@ -43,26 +51,14 @@ public class RequestConsumer {
         }
     }
 
-    public List<APIRequest> consumeMessages() throws Exception {
-        consumer.subscribe(Collections.singletonList("api-request"));
-        List<APIRequest> apiRequests = new ArrayList<>();
-        // Poll for messages
-        ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(10));
-        if (records.isEmpty()) {
-            System.out.println("No messages found in the topic.");
-            return apiRequests;
-        }
-        ObjectMapper objectMapper = new ObjectMapper();
-        for (ConsumerRecord<String, String> record : records) {
-            // Convert JSON message to APIRequest object and add to list
-            APIRequest apiRequest = objectMapper.readValue(record.value(), APIRequest.class);
-            apiRequests.add(apiRequest);
-            // Manually commit the offset to "delete" the message after consuming
-            consumer.commitSync(Collections.singletonMap(
-                    new TopicPartition(record.topic(), record.partition()),
-                    new org.apache.kafka.clients.consumer.OffsetAndMetadata(record.offset() + 1)
-            ));
-        }
-        return apiRequests;
+    public void responseProcessor(Response response) {
+        ResponseWrapper responseWrapper = new ResponseWrapper(response);
+        ResponseModel expectedResponse = new ResponseModel();
+        expectedResponse.setStatusCode(200);
+        ExpectedResponseWrapper expectedResponseWrapper = new ExpectedResponseWrapper();
+        expectedResponseWrapper.setResponseModel(expectedResponse);
+        IResponseValidator responseValidator = new ResponseValidator();
+        ResponseValidatorProcessor validatorProcessor = new ResponseValidatorProcessor(responseValidator);
+        validatorProcessor.validateResponse(responseWrapper, expectedResponseWrapper);
     }
 }
